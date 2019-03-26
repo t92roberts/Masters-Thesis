@@ -1,0 +1,377 @@
+\chapter{Technical Work}
+\label{ChapterTechnicalWork}
+
+This chapter describes the technical implementation of how the agile road mapping problem is modelled and solved in this thesis. It will first cover how instances of the problem are generated so that implementations can be tested and compared. It will explain how a model is implemented to solve the problem using a complete algorithm, and how a similar model was implemented that uses a local search algorithm to find good solutions.
+
+\section{Random Data Generation}
+\label{random_data_generation}
+
+In order to evaluate solving methods, one needs a set of stories and sprints to assign them to. While there is some value in taking an example from a real development team, the interesting properties in terms of implementation and testing are an instance's size and complexity rather than its authenticity. Therefore, the first technical task was to write code that can generate test data, and it can be found here: \url{https://github.com/t92roberts/AgileLocalSearch/tree/master/AgileTestDataGeneration}
+
+There are many parameters to choose when generating product backlogs and sets of sprints. The main parameter is the size of the problem so that one can see how the accuracy and execution time of an algorithm scales as the size grows. There are also parameters specific to stories (business value, story points, number of dependencies) and to sprints (capacity). These will decide how tightly-constrained the problem is and consequently how hard it is to solve.
+
+The estimates given to user stories and sprints are highly subjective and in this project, they are chosen based on the approach suggested in \citet{cohn2004user}: a sprint lasts 2 weeks, 1 story point is equivalent to 1 ideal, uninterrupted day of development work, and one full-time equivalent (FTE) adds 8 story points of capacity to a sprint.
+
+\subsection{Generating Sprints}
+\subsubsection{Estimations}
+A sprint is given a random capacity between a given minimum and maximum value (inclusive) according to a uniform probability distribution. In a real development team, the sprint capacity would be calculated using the number of story points they were able to deliver in the previous sprint minus the story point estimate of the team's planned leave during the sprint. If there is no data about the previous sprint (for example, if the team is new or has changed composition), the rule of thumb of 8 story points per FTE can be used. In this project, the development team is chosen arbitrarily as having 5 FTEs. The parameters given to the test data generation are therefore: minimum sprint capacity: 0, maximum sprint capacity: $5 \times 8 = 40$.
+
+\subsection{Generating Stories}
+\subsubsection{Estimations}
+A story is given a random business value and a random story point estimate between the given minimum and maximum values (inclusive) according to a uniform probability distribution. User stories are typically prioritised using business values between 1 and 10 and given a story point estimation using a modified Fibonacci scale (1, 2, 3, 5, 8, 13). In XP, a mnemonic used to create effective user stories is INVEST \citep{wake_2003} where "S" stands for "Small". Small tasks make the scope clear and break large tasks down into manageable chunks that ideally fit within a sprint. If the complexity of a task is large, it may be estimated as 13 story points to indicate that it must be broken down further (to 8 story points or less) if it is to be worked on. In this thesis, story estimate values are set to: minimum business value: 1, maximum business value: 10, minimum story points: 1, maximum story points: 8.
+
+\subsubsection{Number of Dependencies}
+In a backlog of $n$ stories, each story can have between $0$ and $n-1$ dependencies. A dependency is defined as a story in the backlog that must be completed before the dependent story can begin. The "I" in XP's INVEST mnemonic stands for "Independent". Good user stories should "not overlap in concept, and we’d like to be able to schedule and implement them in any order". While this is not always possible in reality, the model used in this thesis tries to create a backlog where most stories have few dependencies (making them easy to schedule), and some have many dependencies (making them difficult to schedule). The number of dependencies that a story has is chosen according to a geometric probability distribution. This distribution is generated using the formula for a geometric sequence $a_n = a_{n-1}*r$ where element $a_n$ in the sequence is the probability that a story has $n$ dependencies. In this thesis, term $a_0 = 0.5$ and the common ratio is $0.5$. In other words, a story has a 50\% chance of having 0 dependencies, a 25\% chance of having 1 dependency, a 12.5\% chance of having 2 dependencies etc, up to the $n-1$th possible number of dependencies.
+
+\subsubsection{Assigning Dependencies}
+Once the number of dependencies a story will have has been decided, other stories need to be selected from the backlog and assigned as dependencies. Stories are chosen randomly according to a uniform probability distribution. Before a story can be added as a dependency, one first needs to check that it is a valid dependency. The stories and the dependencies between them can be seen as a directed, acyclic graph (DAG) where vertices represent stories and edges represent the dependency links. Randomly connecting stories as dependencies may create cycles in this graph which will cause a deadlock and make stories on the cyclic path impossible to assign without violating their dependency constraints. Therefore, when a story is selected from the backlog, it is added as a dependency and the full graph is traversed in depth-first order to detect if a cycle has been created. If a cycle is found, the dependency is removed and a new potential dependency is selected. This process is repeated until the required number of dependencies has been added or all of the stories in the backlog have been considered.
+
+\subsection{Output}
+Sprints and stories are represented by C++ classes (see section \ref{sec:Model}) that hold the randomly-generated values. These C++ objects are flattened and output to CSV files so that they can be read in by code written to solve the problem.
+
+\section{Static Data Model}\label{sec:Model}
+Two C++ classes are used to model the static data representing the problem:
+
+\subsection{Sprint}
+\begin{enumerate}
+    \item Sprint number - a unique identifier
+    \item Sprint capacity - the maximum number of story points that can be assigned to the sprint
+    \item Sprint bonus - acts as a multiplier to the business value of a user story. Sprints at the start of the road map are given a higher bonus so that it is more valuable to place stories as early as possible in the road map
+\end{enumerate}
+
+\subsection{Story}
+\begin{enumerate}
+    \item Story number - a unique identifier
+    \item Business value - the value of the user story being delivered
+    \item Story points - the effort it will take to be delivered
+    \item List of dependencies - a list of story numbers
+\end{enumerate}
+
+\section{Integer Programming Formulation}
+\label{sec:integer_prog_formulation}
+
+Based on \citet{golfarelli2012sprint}, the optimisation model for the ASPP aims to construct a road map by assigning stories to sprints in a way that maximises the sum of the business value of the road map. It must assign stories to sprints without exceeding the capacity of any sprint, and it must respect the dependencies between stories by assigning all of a story's dependencies to earlier sprints in the road map. A new addition to this model is the concept of a sprint bonus that encourages placing stories as early as possible in the road map. This aims to minimise the total number of sprints used by giving the first sprint has the largest sprint bonus and the last sprint has the smallest bonus so that the model rewards placing stories as early as possible. A sprint's business value is multiplied by the sprint bonus to give a weighted business value. The optimisation model is formulated in the following way:
+
+\begin{table}[h!]
+\begin{center}
+\begin{tabular}{rl} \label{}
+    $x_{ij} = 1$    & if sprint $i$ contains story $j$, otherwise $0$.\\
+\end{tabular}
+\end{center}
+\caption{Decision variables}
+\label{tab:decision_variables}
+\end{table}
+
+\begin{table}[h!]
+\begin{center}
+\begin{tabular}{rl} \label{formulation:decision_variables}
+    $\mathcal{S}$   & Set of $m$ sprints.\\
+    $\mathcal{U}$   & Set of $n$ user stories.\\
+    $c_i$           & Capacity of sprint $i$, measured in story points.\\
+    $b_i$           & Bonus of sprint $i$.\\
+    $v_j$           & Business value of story $j$.\\
+    $p_j$           & Story points estimate of story $j$.\\
+    $\mathcal{D}_j \subset \mathcal{U}$ & Set of stories that story $j$ depends on.\\
+    $\mathcal{B}_j \subset \mathcal{S}$ & Set of sprints before the sprint that story $j$ has been assigned to.
+\end{tabular}
+\end{center}
+\caption{Sets and constants}
+\label{tab:parameters}
+\end{table}
+
+Optimising a road map is defined as:
+
+\begin{alignat}{15}    
+    & Max \sum_{i=1}^{m} \sum_{j=1}^{n} x_{ij} v_j b_i \label{eq:objective}
+\end{alignat}
+\normalsize
+
+subject to
+
+\begin{alignat}{15}    
+    & \sum_{j=1}^{|\mathcal{U}|} x_{ij} p_j \leq c_i                \quad \quad && \forall i \in \mathcal{S}    \label{eq:constr1}\\ % sprint capacity
+    & \sum_{i=1}^{|\mathcal{S}|} x_{ij} \leq 1                      \quad \quad && \forall j \in \mathcal{U}    \label{eq:constr2}\\ % duplicate story assignments
+    & \sum_{i=1}^{|\mathcal{B}_j|} x_{ij} = |D_j|   \quad \quad && \forall j \in \mathcal{U}, \forall i \in \mathcal{B}_j \label{eq:constr3} % dependencies assigned
+\end{alignat}
+\normalsize
+
+\section{CPLEX Implementation}
+\label{sec:cplex_implementation}
+
+IBM ILOG CPLEX Optimizers \citep{ibm_corporation_2018} is a software library that is able to solve combinatorial optimisation problems. This library provides a C++ API that exposes the data structures and functions needed to model and solve CO problems. CPLEX offers many algorithms to solve CO problems and in this thesis (and related work), the Branch and Bound algorithm is used to solve the ASPP optimally. When a problem has been solved, it can return the solution it found and information about how the search progressed. There are three things to define in order to use this library to model and solve a problem: the set of decision variables (and their domains), the set of constraints, and the objective function. The C++ code for the CPLEX implementation of the ASPP in this thesis can be found here: \url{https://github.com/t92roberts/Agile-Sprint-Planning}
+
+\subsection{Decision Variables}
+In the integer programming formulation in section \ref{sec:integer_prog_formulation}, the decision to be made is whether sprint $i$ contains story $j$. Therefore, the decision variables are modelled as a 2-dimensional array of Boolean variables where $roadmap[i][j] = 1$ means that sprint $i$ contains story $j$, and $roadmap[i][j] = 0$ means that sprint $i$ does not contain story $j$. All decision variables are initially set to $0$.
+
+\subsection{Objective Function}
+Equation \ref{eq:objective} states that the optimal solution maximises the sum of the business value multiplied by each sprint's bonus value across all assignments of stories to sprints in the roadmap. The original model in \citet{golfarelli2012sprint} does not consider where stories are assigned in the sprint plan. Simply maximising the sum of a road map's business value produces the optimal solution but in cases where the constraints do not restrict the placement of a story, there was no preference for which sprint the stories were assigned to. The result was that the optimal set of stories were included somewhere in the road map but they were randomly scattered across the sprints. Instead, it is desirable to use the fewest sprints possible by filling the first sprint with stories, then the second sprint, then the third etc rather than stories being randomly distributed across the sprints. Therefore, in this thesis, a new addition to the original model is the concept of a sprint bonus. Every sprint is assigned a bonus where the first sprint has the largest bonus and the last sprint has the smallest bonus. The business value of a story is multiplied by the bonus of the sprint it is assigned to so that it is more valuable to assign a story to an earlier sprint than a later one. Therefore, the objective function is implemented as a CPLEX expression that iterates over the 2D array of decision variables and sums up $v_j \times b_i \times x_{ij}$. This expression is added to the ILOG model as a maximisation objective.
+
+\subsection{Constraints}
+
+Representing the problem as a 2D array means that a column represents a sprint and a row represents a story. This allows for an intuitive implementation of all of the constraints needed.
+
+\subsubsection{Sprint Capacity}
+Equation \ref{eq:constr1} ensures the sum of the story points of the stories does not exceed the sprint's capacity. A constraint is added to the CPLEX model for each sprint that ensures that this sum is less than or equal to the sprint's capacity.
+
+\subsubsection{Duplicate Story Assignments}
+Equation \ref{eq:constr2} ensures that each story is assigned to no more than 1 sprint. In agile sprint planning, it is valid (and actually quite common) that a story is not included in the plan at all, especially if the team is planning only 1 sprint. A story can therefore be assigned to 0 or 1 sprints. This is implemented by building an expression that sums up every domain variable $x_{ij}$ for each row $j$ (representing a story) in the 2D array. Since every decision variable is initially set to 0 when the CPLEX model is constructed (indicating that it is not yet part of the sprint plan) and set to 1 when it is included, this sum acts as a count of how many times each story $j$ was assigned to a sprint. A constraint is added to the model that ensures that the sum for each row must be less than or equal to 1.
+
+\subsubsection{Story Dependencies}
+Equation \ref{eq:constr3} ensures that all of story $j$'s dependencies have been assigned to a sprint before sprint $i$ where story $j$ has been assigned to. Thus, assigning story $j$ to sprint $i$ is feasible if every story $d \subseteq D_j$ has been assigned to a sprint before sprint $i$. For each story $d \subseteq D_j$, an expression is built that sums up the values in the preceding columns (sprints) on the same row (story) in the 2D array as story $d$. This expression acts as a count of how many times $d$ was assigned to a sprint before sprint $i$. A constraint is added to the model for every $d \subseteq D_j$ enforcing that this sum must be equal to 1. This ensures that the stories that story $j$ depends on have been assigned to a sprint before than sprint $i$.
+
+\subsection{Warm Start} \label{subsec:warm_start}
+Branch and Bound uses a bound on the solution value to make cuts in the search tree. If it starts with a solution where no assignments have been made, it must incrementally makes assignments and update the bound as it progresses. This means that at the start of the search, the bound may be very loose and few cuts are made. Instead, a solution with assignments already made can be given to the algorithm so that Branch and Bound is 'seeded' with an incumbent solution and bound on the cost. The motivation is that if a good incumbent solution is known from the start, it may start the search from an advanced position compared to starting from scratch. This is known as a 'warm start' or an 'advanced start'. Ideally, the initial solution can be generated quickly and is close to optimal. Warm starts can greatly improve the time to find the optimal solution but results may vary significantly depending on how good the given solution is. If the solution is poor, the bound will not help the search and the computation time spent to build it will have been wasted, and the total time may be longer than without a warm start.
+
+CPLEX provides functionality to give the model a 'MIP start' where one can assign values to some or all of the decision variables before the search starts. An initial solution is generated using the same technique as described later in section \ref{repair} and the corresponding assignments are inserted into a MIP start and added to the ILOG model.
+
+\section{Metaheuristic Implementation}
+
+The next task is to write the C++ code that models the same ASPP so that it can be solved using large neighbourhood search, and this can be found here: \url{https://github.com/t92roberts/AgileLocalSearch/tree/master/AgileLocalSearch}. In the integer programming formulation, it is modelled as a set of binary decision variables indicating if a sprint contains a story. The local search formulation is modelled so that each decision variable represents a user story and its domain is the set of sprints and solving the problem involves assigning a sprint number to every story.
+
+While the goal is to assign stories to sprints, it is also a valid assignment to keep a story in the product backlog if other stories can deliver more value, if there is no sprint capacity to place it, or if its dependencies have not been delivered/planned. When the data is loaded, one extra sprint is added. This special sprint has 0 sprint bonus and infinite capacity and represents the product backlog. If a story is assigned to this sprint, it doesn't add any value to the road map but it is still a valid assignment if there is nowhere to place it in the available sprints. Therefore when the problem is being solved using metaheuristics, $m + 1$ sprints are used whereas in the integer programming formulation, there are $m$ sprints.
+
+\subsection{Pseudo code}
+
+\begin{algorithm}[H]
+\caption{Large Neighbourhood Search}\label{metaheuristic}
+\begin{algorithmic}[1]
+    \Procedure{LNS}{$\mathcal{S}, \mathcal{U}$}
+        \State $\textit{best solution} \gets \textit{randomAssignment}(\mathcal{U}, \mathcal{S})$
+        \State $\textit{current solution} \gets \textit{best solution}$
+        
+        \While {$iteration < a$}
+            \If {$\textit{unaccepted iterations} > a / 10$}
+                \State $\textit{best solution} \gets \textit{randomAssignment}(\mathcal{U}, \mathcal{S})$
+            \EndIf
+            
+            \State $\textit{destroyed solution} \gets \textit{destroy}(\textit{current solution})$
+            \State $\textit{repaired solution} \gets \textit{repair}(\textit{destroyed solution})$
+            
+            \If {$\textit{accept}(\textit{repaired solution, current solution})$}
+                \State $\textit{current solution} \gets \textit{repaired solution}$
+                
+                \If {$\textit{value}(\textit{current solution}) > \textit{value}(\textit{best solution})$}
+                    \State $\textit{best solution} \gets \textit{current solution}$
+                \EndIf
+            \EndIf
+        \EndWhile
+        
+        \State \Return {$\textit{best solution}$}
+    \EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+Algorithm \ref{metaheuristic} shows the high-level logic of the metaheuristic that has been implemented. It uses a combination of large neighbourhood search, random restarts, tabu search, and simulating annealing to search the state space and return the best solution it can find in the given time.
+
+Line 2 constructs a solution that will be the starting 'best' solution of the search. It does this by shuffling the set of all stories so that they are in a random order and greedily assigns them to sprints (see section \ref{repair}). Because the search has not started yet, Line 3 sets the current solution as the initial best one. Lines 4 - 12 are the main loop of the algorithm that carry out the search. Line 4 shows that the search will terminate after a fixed number of $a$ iterations. Lines 5 and 6 show the random restarts step where if the search does not accept a new solution for one-tenth of the total number of iterations, a new solution is randomly generated in the same way as in Line 2 and the search continues from this new starting point. Lines 7 and 8 perform the large neighbourhood steps where Line 7 partially destroys the current solution by removing some of the stories from the sprint they are assigned to create an incomplete solution (see section \ref{destroy}) and Line 8 repairs the partial solution by reinserting the removed stories to create a new, complete solution (see section \ref{repair}). Line 9 determines if the new solution should be accepted as the new candidate solution and replace the current one (see section \ref{acceptance}). Lines 11 and 12 check if the newly-accepted solution is better than the current best one found so far during the entire search and replaces it if so.
+
+\subsection{Destroy} \label{destroy}
+
+Two strategies are used to destroy a solution: random and radial. These are applied alternately to allow the search to add some variety to the neighbour generation.
+
+\subsubsection{Random Destruction}
+
+Random destruction is the simplest approach where stories are randomly chosen from the set of all stories and removed from whichever sprint they are currently assigned to. While random destruction is a relatively crude technique, it is an effective way to encourage diversification in the search as every story has the chance of being reassigned, thereby reducing the chance of becoming stuck in local maxima. Algorithm \ref{random_destruction} outlines the steps to achieve this destruction.
+
+\begin{algorithm}[H]
+\caption{Random Destruction}\label{random_destruction}
+\begin{algorithmic}[1]
+    \State $r \gets \textit{number of stories to remove}$
+    
+    \Procedure{RandomDestroy}{$\mathcal{S}, \mathcal{U}, r$}
+        \State $\mathcal{R} \gets \textit{set of removed stories}$
+        \State $\mathcal{M} \gets \textit{set of moves}$
+        
+        \While{$|\mathcal{R}| < r \land |\mathcal{U}| > 0$}
+            \State $story \gets \textit{random story} \in \mathcal{U}$
+            \State $sprint \gets AssignedSprint(story) \in \mathcal{S}$
+            \State $Unassign(story, sprint)$
+            
+            \State $\mathcal{R} \gets \mathcal{R} \cup story$
+            \State $\mathcal{U} \gets \mathcal{U} \setminus story$
+            \State $\mathcal{M} \gets \mathcal{M} \cup Move(story, sprint)$
+        \EndWhile
+        
+        \State \Return{$\mathcal{S}, \mathcal{U}, \mathcal{M}$}
+    \EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+Lines 5 - 11 are the main loop that removes stories from their sprints. Line 5 shows that the loop repeats until the required number of stories has been removed or there are no more stories available to consider. Line 6 randomly selects a story from the solution and Line 7 gets the sprint that it is assigned to. Line 8 then unassigns the story from its sprint. Line 9 adds the story to the set of removed stories and Line 10 removes the story from the solution so that it is not considered again in this round of destruction. Line 11 creates a move that represents the opposite action of removing the story from its sprint (i.e. adding the removed story back in to the sprint it was just removed from), and the move is added to the set of moves. This move will later be checked against the Tabu list and adding the reverse move ensures that the action will not be undone for a given number of iterations.
+
+\subsubsection{Radial Destruction}
+
+While random destruction can prove effective, the characteristics of a specific problem can be exploited to heuristically decide which assignments to remove. \citet{shaw1998using} describes that while there are many strategies to do this, a general approach is to remove \textit{related} assignments. In vehicle routing problems, Shaw suggested that related visits could be those that are geographically close to one another, on the same route, or have similar allowable visiting hours. A relatedness measure that uses one or a combination of these heuristics defines how related two visits are. This general strategy can be adapted to other problems and in the ASPP, the relatedness measure is a binary value indicating whether two stories are directly or indirectly connected in the DAG of dependencies. We refer to this as 'radial' destruction because one story is chosen as the starting point, its immediate dependencies are removed, and the removal radiates outwards through the graph in breadth-first order. Algorithm \ref{radial_destruction} shows how this is done.
+
+\begin{algorithm}[H]
+\caption{Radial Destruction}\label{radial_destruction}
+\begin{algorithmic}[1]
+    \State $r \gets \textit{number of stories to remove}$
+    
+    \Procedure{RadialDestroy}{$\mathcal{S}, \mathcal{U}, r$}
+        \State $\mathcal{R} \gets \textit{set of removed stories}$
+        \State $\mathcal{M} \gets \textit{set of moves}$
+        
+        \While{$|\mathcal{R}| < r \land |\mathcal{U}| > 0$}
+            \State $story \gets \textit{random story} \in \mathcal{U}$
+            \State $\mathcal{R} \gets \mathcal{R} \cup BFS(story)$
+            
+            \For{$\textit{removed story} \in \mathcal{R}$}
+                \State $\mathcal{U} \gets \mathcal{U} \setminus \textit{removed story}$
+                \State $\textit{assigned sprint} \gets AssignedSprint(\textit{removed story})$
+                \State $Unassign(story, sprint)$
+                \State $\mathcal{M} \gets \mathcal{M} \cup \textit{(removed story, sprint)}$
+            \EndFor
+        \EndWhile
+        
+        \State \Return{$\mathcal{S}, \mathcal{U}, \mathcal{M}$}
+    \EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+Lines 5 - 12 are the main loop that removes stories from their sprints. Line 5 shows that the loop repeats until the required number of stories has been removed or there are no more stories to remove. Line 6 randomly selects a story from the solution. Line 7 uses this story as the root of the sub-tree in the breadth-first search (BFS). The BFS function traverses the story's dependency graph and adds its direct and indirect dependencies to the set of removed stories. When the BFS finishes traversing the sub-tree, Lines 8 - 12 remove the assignments from the solution. Line 9 removes the story from the solution so that it is not considered again in this round of destruction. Line 10 gets the sprint that it was assigned to and Line 11 unassigns the story from this sprint. Line 12 creates a move representing the opposite action to the removal of the story from its sprint and adds it to the set of moves. This move will later be checked against and/or added to the Tabu list and adding the reverse move ensures that the action will not be undone for a given number of iterations.
+
+To implement the breadth-first search, a story is chosen at random from the set of all stories. This is treated as the root of a sub-tree in the graph of dependencies and this sub-tree is traversed in breadth-first order. As a story is visited during the traversal, it is removed from the sprint it is assigned to. The traversal continues until the required number of stories have been removed. Traversing the tree in breadth-first order ensures that the immediate dependencies of the 'root' story are removed first, and if more stories need to be removed, the dependencies of those immediate dependencies are then removed. If the full sub-tree is traversed but more stories need to be removed, a story that has not already been visited is chosen at random and the same process is repeated.
+
+\subsubsection{Level of Destruction}
+
+A critical parameter for destroying a solution is how much of the solution to destroy (i.e. how many assignments should be removed) per iteration. Removing only 1 assignment forces the algorithm to progress very slowly and may increase the chance of getting stuck in a small area of the solution space, especially when the acceptance criteria described in section \ref{acceptance} might restrict the size of the neighbourhood even further. Conversely, removing 100\% of the assignments degenerates the search to a random walk. The level of destruction in this paper was chosen experimentally as 15\%.
+
+An issue with removing a fixed number of stories is that it can make it difficult to reinsert stories into a new position due to the set of constraints. To illustrate this issue, if Story 2 depends on Story 1, and Story 1 has no dependencies, Story 1 can be placed in Sprint 1 and Story 2 in Sprint 2 - the dependency constraints are initially satisfied. However, if Story 1 is now removed and placed in Sprint 3 (or back into the product backlog), its own dependency constraints are satisfied but now Story 2's dependency constraints have been violated. Therefore, a decision needs to be made: either enforce that all stories connected by a dependency are removed \emph{in both directions} (i.e. recursively remove Story 1's dependencies and the stories that depend on Story 1) or allow a fixed number of stories to be removed and permit infeasible assignments. The first method ensures that every candidate solution is feasible but there is no guarantee that the global optimum can be reached through a sequence of feasible solutions. The second method means that many iterations might be 'wasted' by generating intermediate, infeasible solutions to allow the search to progress which cannot be accepted as the new best solution. In this thesis, the second option is used so that the sprint capacity constraint is enforced but the dependency constraint is relaxed. However, only feasible solutions are allowed to replace the best solution found so far.
+
+\subsection{Repair} \label{repair}
+
+Once a solution has been partially destroyed, it must be repaired back into a complete solution. \citet{shaw1998using} uses a branch and bound technique to find the optimal way to reinsert the removed assignments. The benefit of this approach is that the resulting repaired solution is guaranteed to improve the objective function as much as possible based on the destroyed solution. The motivation is that depending on how much of the solution has been destroyed, most of the assignments have already been made. Therefore, it is more feasible to run a 'heavyweight' algorithm like branch and bound on this much smaller subset of the solution space. However, the price of using complete algorithms like branch and bound is that even a subset of the solution space can still be quite large and it still takes time to exhaustively search it. \citet{ropke2006adaptive} chooses to use a selection of insertion heuristics including a basic greedy heuristic so that visits in the vehicle routing problem can be reinserted in a fast (but approximate) way. Similarly in this thesis, a greedy heuristic is used to repair a destroyed solution. The greedy heuristic is shown in Algorithm \ref{greedy_insert}.
+
+\begin{algorithm}[H]
+\caption{Greedy Insertion}\label{greedy_insert}
+\begin{algorithmic}[1]
+    \State $\mathcal{I} \gets \textit{set of user stories to insert into the destroyed solution}$
+    
+    \Procedure{Insert Stories}{$\mathcal{I}, \emph{roadmap}$}
+        \State $\mathcal{M} \gets \textit{set of moves}$
+        
+        \While{$|\mathcal{I}| > 0$}
+            \State $\emph{story} \gets \mathcal{I}_0$
+            
+            \For{$\textit{sprint} \in \mathcal{S}$}
+                \If {$ValidInsert(story, sprint)$}
+                    \State $AssignStoryToSprint(story, sprint)$
+                    \State $\mathcal{I} \gets \mathcal{I} \setminus \emph{story}$
+                \EndIf
+            
+                \State $\mathcal{M} \gets \mathcal{M} \cup \textit{(story, sprint)}$
+            \EndFor
+        \EndWhile
+        
+        \State \Return{$roadmap, \mathcal{M}$}
+    \EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+For every story that was removed, the repair algorithm tries to insert it into the earliest feasible sprint to maximise the bonus received from the sprint bonus. To determine the order in which stories are reinserted, the set of removed stories are sorted according to 4 factors (with the next sorting condition used to break ties in the previous): business value, story points, number of dependencies, and number of dependees. Firstly, they are sorted by business value (largest to smallest) because intuitively, it is desirable to assign high-value stories to early sprints. Secondly, stories are sorted by story points (smallest to largest) so that it tries to fit as many stories into early sprints as possible. Next, they are sorted by the number of dependencies they have (smallest to largest) and the number of dependees (smallest to largest). The assumption here is that stories with many dependency links are difficult to assign to early sprints because many other stories must have been assigned before them. Therefore, assigning stories with fewer dependency links first may increase the chance of being able to assign highly-constrained stories in later sprints, especially when the solution has been destroyed using radial destruction. In summary, this greedy heuristic can be described as trying to reinsert the highest-value, lowest effort stories, and least-constrained stories to the earliest sprint possible.
+
+\subsection{Acceptance Criteria} \label{acceptance}
+
+When a new solution has been generated by destroying and repairing the current solution, the algorithm must decide whether to accept the new solution and move the search forward. The simplest approach is to only accept a new solution if it improves upon the current solution. This short-sightedness can cause the search to get stuck in a small area of the solution space and never break free to explore other areas where the globally-optimum solution might be. It is therefore desirable to allow the search to break out of a local maximum. In this thesis, two acceptance criteria are blended together to try to mitigate some of these issues: tabu search and simulated annealing.
+
+\begin{algorithm}[H]
+\caption{Acceptance criteria}\label{acceptance_criteria}
+\begin{algorithmic}[1]
+    \State $\textit{delta} \gets \textit{new solution value} - \textit{current solution value}$
+    \State $\mathcal{M} \gets \textit{set of moves made during repair}$
+    
+    \If {$\textit{delta} > 0$}
+        \Return {$True$}
+    \EndIf
+    
+    \For {$move \in \mathcal{I}$}
+        \If {isTabu(Move)}
+            \Return {$False$}
+        \EndIf
+    \EndFor
+    
+    \If {$exp(\frac{delta}{temperature})$ < random number}
+        \Return {$True$}
+    \EndIf
+    
+    \State \Return {$\textit{False}$}
+\end{algorithmic}
+\end{algorithm}
+
+Algorithm \ref{acceptance_criteria} shows the acceptance criteria used to decide if a new solution should replace the current solution and move the search forwards.
+
+Line 1 calculates the difference in value between the new solution and the current one. If the delta is positive, it improves the search's result and Line 2 accepts it immediately.
+Lines 4 - 6 check if any of the moves made during repair are in the Tabu list. If so, the new solution is not accepted. Line 8 has the simulated annealing acceptance probability that compares how bad the solution is with the current temperature and accepts the new solution according to the acceptance probability. If none of the acceptance criteria accept the new solution, Line 10 rejects it.
+
+\subsubsection{Simulated Annealing} \label{simulated_annealing}
+
+As previously mentioned, only accepting improving solutions can lead to finding a local optimum and potentially missing the global optimum. A way to avoid this problem is to relax the requirement of only accepting improving solutions. By allowing non-improving solutions to be accepted, the search is able to move through undesirable areas of the solution space in the hope that it can arrive in a new area that has high-value solutions.
+
+The cooling schedule is a key parameter of simulated annealing as cooling too slowly keeps the search more like a random walk that isn't able to explore local areas, and cooling too quickly doesn't allow it to break free of low-value areas. \citet{kirkpatrick1983optimization} uses a geometric cooling schedule with a cooling rate of 90\% so that temperature $T$ at time $x$ is given by $T_x = T_{x-1} \times 0.9$. The initial temperature $T_0$ is chosen so that almost every move will be accepted. Therefore, the initial temperature can have as much of an impact on performance as the cooling schedule. \citet{kirkpatrick1983optimization} suggests that the optimal starting temperature is the worst possible move between two neighbouring solutions in the entire solution space. The annealing acceptance probability tries to judge how bad a move is, and a good way to judge this is to compare it to the worst possible move. However, finding the worst move is impractical because one must enumerate all moves to find the largest delta. An estimation of the worst move can be found by generating a subset of solutions and finding the largest delta between them. Algorithm \ref{annealing_initial_temp} shows how a subset of solutions is randomly generated and the objective function value is stored in a list. The MaxDifference function shown in Algorithm  \ref{max_difference} finds the smallest and largest values and returns the delta between them. This delta is used an approximation of the worst possible move and is used as the starting temperature $T_0$ in the simulated annealing implementation in this thesis (to see other approaches to this problem, \citet{ben2004computing} explores more complex heuristics for finding a good starting temperature).
+
+\begin{algorithm}[H]
+\caption{Initial temperature}\label{annealing_initial_temp}
+\begin{algorithmic}[1]
+    \State $\mathcal{S} \gets \textit{set of all sprints in a solution}$
+    \State $\mathcal{U} \gets \textit{set of all user stories in a solution}$
+    
+    \Procedure{Initial Temperature}{$\mathcal{S}, \mathcal{U}$}
+        \State $\mathcal{V} \gets \emph{empty set of solution values}$
+        
+        \For{$\textit{0} \to (|\mathcal{S}| \times |\mathcal{U}|)$}
+            \State $\mathcal{V} \gets \mathcal{V} \cup value(\emph{random roadmap})$
+        \EndFor
+        
+        \State \Return{$maxDifference(\mathcal{V})$}
+    \EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{Maximum Difference}\label{max_difference}
+\begin{algorithmic}[1]
+    \Procedure{maxDifference}{$\mathcal{V}$}
+        \State $min \gets \mathcal{V}_0$
+        \State $max \gets \mathcal{V}_1$
+    
+        \For{$v \in \mathcal{V}$}
+            \If {$v < min$}
+                \State $min \gets v$
+            \Else{}
+                \If{$v > max$}
+                    \State $max \gets v$
+                \EndIf
+            \EndIf
+        \EndFor
+        
+        \State \Return{$max - min$}
+    \EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{Tabu Search} \label{tabu}
+
+The first task in implementing tabu search is to define what a move is for the ASPP. This can be a difficult choice to make because defining moves that are too unique can mean that there are too few 'hits' in the tabu list, making it redundant. Conversely, moves that are too common may get many hits and prevent the search from progressing. In the case of agile road map generation, destroying and repairing a solution involves removing a story from a sprint and assigning it to another sprint. When a story is being assigned to a sprint, it is desirable that it is not assigned back into the sprint it was removed from for a number of iterations. Therefore, a move is defined as inserting a story in to a sprint. When story $j$ is removed from sprint $i$ during destruction, the opposite move is added to the tabu list ($j \rightarrow i$) to prevent story $j$ from being re-inserted into sprint $i$ during the repair phase.
+
+The second task is to decide how long a move is prohibited for (its \textit{tenure} in the tabu list). This is also a difficult choice to make because moves that are banned for too short of a time will result in too few hits in the list, and too long of a tenure may result in many hits which will stagnate the search and prevent it from progressing. Choosing a value that works for many instances of the problem a priori is hard and while the tenure chosen in this thesis is somewhat arbitrary, it uses the observation that the tenure should be a function of the difficulty of the problem. The difficulty of the problem (in terms of the number of sprints and stories) defines how many possible moves there are and consequently the possible size of a solution's neighbourhood. Intuitively, small, highly-constrained problems will have fewer possible moves while large, lightly-constrained problems will have many possible moves. Therefore, the tenure should correlate with this so that small, difficult problems have a short tenure and large, easy problems have a long tenure. The tenure in this work was chosen experimentally as $0.1 \times m \times n$.
+
+Finally, tabu search prevents repeatedly revisiting the same moves but in some cases, getting to a new best solution can only be done by making a banned move. \citet{glover1989tabu} outlines how \textit{aspiration criteria} should be used to ensure that an improving move is always accepted, even if it uses a move that is in the tabu list since it must be a new solution. In this implementation, if a new solution is better than the current one (the delta between a new and the current solution is positive), the new solution is accepted straight away and the tabu list is not checked. If the delta is 0 or negative, all of the repair moves are checked against the tabu list in the way shown by Algorithm \ref{tabu_check}.
+
+\begin{algorithm}[H]
+\caption{Check if a move is Tabu}\label{tabu_check}
+\begin{algorithmic}[1]
+    \Procedure{MoveIsTabu}{$move$}
+        \If {$\textit{move} \in \textit{tabu list}$}
+            \If {$\textit{current iteration - tabu tenure > expiration iteration}$}
+                \State $\textit{removeFromTabulist(move)}$
+                \State \Return {$\textit{False}$}
+            \Else{}
+                \State \Return {$\textit{True}$}
+            \EndIf
+        \Else{}
+            \State \Return {$\textit{False}$}
+        \EndIf
+    \EndProcedure
+\end{algorithmic}
+\end{algorithm}
