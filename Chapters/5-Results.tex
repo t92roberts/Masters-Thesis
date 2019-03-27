@@ -74,7 +74,7 @@ As described in \cref{subsec:warm_start}, CPLEX can use warm starts to improve i
 
 \section{Metaheuristic Results}
 
-The metaheuristic algorithm uses randomness at many stages of the search and one execution may produce results that are different to another execution on the same data set. To control for this uncertainty, the metaheuristic algorithm was run 3 times on each test problem and the results are aggregated.
+The metaheuristic algorithm uses randomness at many stages of the search and one execution may produce results that are different to another execution on the same data set. To control for this uncertainty, the metaheuristic algorithm was run 3 times on each test problem and the results are aggregated. To give context to the results, the value gap represents how close the solutions produced by the metaheuristic are, where 0\% means that they are equal (the metaheuristic found the optimal) and 10\% means that the metaheuristic was 10\% below the optimal value. For the time gap, 0\% means that the metaheuristic took exactly the same time as the optimal approach, +10\% means that the metaheuristic was 10\% faster than the optimal approach, and -10\% means that the metaheuristic was 10\% slower than the optimal approach.
 
 Before diving into the comparison of adding each metaheuristic, a summary of the results is given first. The best results were found by using a combination of large neighbourhood search, random restarts and simulated annealing. Adding Tabu search gave slightly worse (but still very good) value solutions in relatively more time than the former combination. When using hill climbing, random restarts and simulated annealing, \cref{fig:value_vs_size} shows that even as the size of the problem grows, the value of solutions found is not significantly impacted and remains close to optimal.
 
@@ -221,21 +221,21 @@ Another measure of difficulty is how constrained the problem is. In the ASPP, th
 \begin{figure}[h!]
     \centering
     \includegraphics[width=\textwidth]{Figures/FinalResults/annealing_time_size.png}
-     \caption{Size vs time - negative gap means the optimal method was faster}
+     \caption{Size vs time - positive gap means the metaheuristic method was faster}
      \label{fig:time_vs_size}
 \end{figure}
 
 \begin{figure}[h!]
     \centering
     \includegraphics[width=\textwidth]{Figures/FinalResults/annealing_time_dependencies_stories.png}
-     \caption{Ratio of dependencies to stories vs time - negative gap means the optimal method was faster}
+     \caption{Ratio of dependencies to stories vs time - positive gap means the metaheuristic method was faster}
      \label{fig:time_vs_dependencies_stories}
 \end{figure}
 
 \begin{figure}[h!]
     \centering
     \includegraphics[width=\textwidth]{Figures/FinalResults/annealing_time_stories_sprints.png}
-     \caption{Ratio of stories to sprints vs time - negative gap means the optimal method was faster}
+     \caption{Ratio of stories to sprints vs time - positive gap means the metaheuristic method was faster}
      \label{fig:time_vs_stories_sprints}
 \end{figure}
 
@@ -243,19 +243,21 @@ Another measure of difficulty is how constrained the problem is. In the ASPP, th
 
 \subsection{Comparison of Metaheuristics}
 
-To test how each metaheuristic impacts the value and time of finding approximate solutions, the metaheuristic algorithm was first run using only simple hill climbing. Using this is a baseline, other strategies were cumulatively added in the following order: random restarts, simulated annealing, tabu search. To compare the impact of adding each metaheuristic, \Cref{fig:value_gap_perc_vs_heuristic} and \cref{fig:time_gap_perc_vs_heuristic} show the value gap and time gap (respectively) when adding each metaheuristic. These results are aggregated across problems instances of very different sizes and difficulties and they are shown only to illustrate the general trend - a more detailed analysis of the results is given in \cref{subsec:result_distributions}. The results shows that even the basic hill climbing can get within 1.65\% (average) / 0.95\% (median) of the optimal value but the standard deviation is relatively high, suggesting that it gives inconsistent results. Adding random restarts closes the value gap to 1.34\% (average) / 0.71\% (median) and takes approximately the same amount of time. This is expected because hill climbing and random restarts were given the same number of iterations, but the latter was allowed to restart up to 10 times within that number of iterations if the search stagnated. Adding simulated annealing slightly improved the value gap but the time gap noticeably worsened. However, the median time gap shows that it still performed 9\% faster than the complete algorithm. Adding tabu search slightly increased the value gap and dramatically increased the time gap (this is explored further in the next \cref{subsec:result_distributions}).
+To test how each metaheuristic impacts the value and time of finding approximate solutions, the metaheuristic algorithm was first run using only large neighbourhood search (LNS) where only improving candidate solutions are accepted (also known as hill climbing). Using this is a baseline, other metaheuristic strategies were cumulatively added in the following order: random restarts (restarts), simulated annealing (SA), tabu search (TS). To compare the impact of adding each metaheuristic, \Cref{fig:value_gap_perc_vs_heuristic} and \cref{fig:time_gap_perc_vs_heuristic} show the value gap and time gap (respectively) when adding each metaheuristic. It is important to note that these results are aggregated at a high level across problem instances of very different sizes and difficulties and these results are shown only to illustrate the general trend - a more detailed analysis of the results is given in \cref{subsec:result_distributions}. The results shows that even the basic hill climbing can get within 1.65\% (average) / 0.95\% (median) of the optimal value but the standard deviation is relatively high, suggesting that it gives inconsistent results. Adding random restarts closes the value gap to 1.34\% (average) / 0.71\% (median) and takes approximately the same amount of time. This is expected because hill climbing and random restarts were given the same number of iterations, but the latter was allowed to restart up to 10 times within that number of iterations if the search stagnated. Adding simulated annealing slightly improved the value gap but the time gap noticeably worsened. However, the median time gap shows that it still performed 9\% faster than the complete algorithm. Adding tabu search slightly increased the value gap and dramatically increased the time gap.
+
+The small increase in the value gap when using tabu search could be because the search is getting stalled when the tabu list forbids accepting certain moves. Possible reasons for this could be the definition of the move or the length of the tabu tenure. On reflection, a better definition of a move could have been to have the concept of a departure sprint and a destination sprint. The tabu list would then prevent moving a story from its destination sprint back to its departure sprint whereas the definition used in this thesis was only to prevent a story being moved back to its departure sprint (i.e. it could not be moved from \emph{any} sprint back to its departure sprint while it was tabu). It could also be due to the fact that neighbours are generated stochastically and there may be cases where several successive neighbours are generated but all contain the same banned moves. As long as there is the chance that a move that was already recently found to be tabu can appear in successive neighbours (effectively a 'random choice with replacement' approach), the search may stall. On one hand, this is precisely the job of the tabu list so that the search is encouraged to explore new areas, but ultimately, preventing the search from accepting neighbours costs iterations that may have led to higher-value solutions. The worse time gap could simply be due to the additional overhead of creating moves during destruction, checking moves, and generally managing the tabu list. This overheard is low in small problems but since both the size of the tabu list and the tabu tenure are functions of the size of the problem, this overhead grows as the size of the problem grows (although it does only grow linearly). Additionally, \cref{subsec:result_distributions} will show that most 
 
 \begin{figure}[h!]
     \centering
     \includegraphics[width=\textwidth]{Figures/Metaheuristics/value_gap_perc_vs_heuristic.png}
-    \caption{Value Gap \% vs Heuristic}
+    \caption{Heuristics vs Value Gap \%}
     \label{fig:value_gap_perc_vs_heuristic}
 \end{figure}
 
 \begin{figure}[h!]
     \centering
     \includegraphics[width=\textwidth]{Figures/Metaheuristics/time_gap_perc_vs_heuristic.png}
-    \caption{Time Gap \% vs Heuristic}
+    \caption{Heuristics vs Time Gap \% (positive gap means the metaheuristic method was faster)}
     \label{fig:time_gap_perc_vs_heuristic}
 \end{figure}
 
@@ -268,56 +270,56 @@ To test how each metaheuristic impacts the value and time of finding approximate
 \begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth]{Figures/Metaheuristics/hill_climb_value_gap.png}
-    \caption{Hill Climbing Value Gap \%}
+    \caption{LNS (Hill Climbing) Value Gap \%}
     \label{fig:value_gap_perc_hill_climb}
 \end{figure}
 
 \begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth]{Figures/Metaheuristics/restarts_value_gap.png}
-    \caption{Adding Random Restarts Value Gap \%}
+    \caption{LNS + Random Restarts Value Gap \%}
     \label{fig:value_gap_perc_restarts}
 \end{figure}
 
 \begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth]{Figures/Metaheuristics/annealing_value_gap.png}
-    \caption{Adding Simulated Annealing Value Gap \%}
+    \caption{LNS + Random Restarts + SA Value Gap \%}
     \label{fig:value_gap_perc_annealing}
 \end{figure}
 
 \begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth]{Figures/Metaheuristics/tabu_value_gap.png}
-    \caption{Adding Tabu Search Value Gap \%}
+    \caption{LNS + Random Restarts + SA + TS Value Gap \%}
     \label{fig:value_gap_perc_tabu}
 \end{figure}
 
 \begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth]{Figures/Metaheuristics/hill_climb_time_gap.png}
-    \caption{Hill Climbing Time Gap \%}
+    \caption{LNS (Hill Climbing) Time Gap \% - positive gap means the metaheuristic method was faster}
     \label{fig:time_gap_perc_hill_climb}
 \end{figure}
 
 \begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth]{Figures/Metaheuristics/restarts_time_gap.png}
-    \caption{Adding Random Restarts Time Gap \%}
+    \caption{LNS + Random Restarts Time Gap \% - positive gap means the metaheuristic method was faster}
     \label{fig:time_gap_perc_restarts}
 \end{figure}
 
 \begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth]{Figures/Metaheuristics/annealing_time_gap.png}
-    \caption{Adding Simulated Annealing Time Gap \%}
+    \caption{LNS + Random Restarts + SA Time Gap \% - positive gap means the metaheuristic method was faster}
     \label{fig:time_gap_perc_annealing}
 \end{figure}
 
 \begin{figure}[!htbp]
     \centering
     \includegraphics[width=\textwidth]{Figures/Metaheuristics/tabu_time_gap.png}
-    \caption{Adding Tabu Search Time Gap \%}
+    \caption{LNS + Random Restarts + SA + TS Time Gap \% - positive gap means the metaheuristic method was faster}
     \label{fig:time_gap_perc_tabu}
 \end{figure}
 
@@ -325,7 +327,7 @@ To test how each metaheuristic impacts the value and time of finding approximate
 
 \subsection{Value and Time Gaps}
 
-Even though the search can be seen to perform well overall, it is also important to understand how and why the local search struggles and why the outliers occur. \textbf{N.B.} all figures shown in this section are using the combination of hill climbing, random restarts and simulated annealing but not tabu search (since this combination gave the best results).
+Even though the search can be seen to perform well overall, it is also important to understand how and why this metaheuristic approach struggles and why the outliers occur. Take note that all figures shown in this subsection are using the combination of LNS (hill climbing), random restarts and simulated annealing since this gave the best results, and they do not include tabu search. As a reminder, the value gap represents how close the solutions produced by the metaheuristic are, where 0\% means that they are equal (the metaheuristic found the optimal) and 10\% means that the metaheuristic was 10\% below the optimal value. For the time gap, 0\% means that the metaheuristic took exactly the same time as the optimal approach, +10\% means that the metaheuristic was 10\% faster than the optimal approach, and -10\% means that the metaheuristic was 10\% slower than the optimal approach.
 
 \Cref{fig:value_gap_vs_size} shows that the value gap is much smaller or finds the optimal solution in small problems and increases in larger problems (fluctuating around 0.74\% in these results). However, it's clear from the time gap in \cref{fig:time_gap_vs_size} that the local search is usually slower than the complete algorithm in small problems but is faster in large problems. Naturally, if the solution space is small, Branch and Bound can traverse most of it in a very short time whereas a local search with a fixed number of iterations may 'waste' some time in these cases.
 
