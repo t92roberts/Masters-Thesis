@@ -143,8 +143,6 @@ Another measure of difficulty is how constrained the problem is. In the ASPP, th
 
 \begin{table}[h!]
 \centering
-\caption{Dependencies/stories ratio vs value gap \%\\(best and worst highlighted)}
-\label{dependencies_stories_ratio_vs_value_gap}
 \begin{tabular}{|c|c|}
 \hline
 \textbf{Dependencies/Stories Ratio} & \textbf{Median Value Gap \%} \\ \hline
@@ -165,12 +163,12 @@ Another measure of difficulty is how constrained the problem is. In the ASPP, th
 \rowcolor[HTML]{67FD9A} 
 1.6 & 0 \\ \hline
 \end{tabular}
+\caption{Dependencies/stories ratio vs value gap \%\\(best and worst highlighted)}
+\label{dependencies_stories_ratio_vs_value_gap}
 \end{table}
 
 \begin{table}[h!]
 \centering
-\caption{Stories/sprints ratio vs value gap \%\\(best and worst highlighted)}
-\label{stories_sprints_ratio_vs_value_gap}
 \begin{tabular}{|c|c|}
 \hline
 \textbf{Stories/Sprints Ratio} & \textbf{Median Value Gap \%} \\ \hline
@@ -212,6 +210,8 @@ Another measure of difficulty is how constrained the problem is. In the ASPP, th
 9 & 8 \\ \hline
 10 & 3.9 \\ \hline
 \end{tabular}
+\caption{Stories/sprints ratio vs value gap \%\\(best and worst highlighted)}
+\label{stories_sprints_ratio_vs_value_gap}
 \end{table}
 
 \FloatBarrier
@@ -243,24 +243,26 @@ Another measure of difficulty is how constrained the problem is. In the ASPP, th
 
 \subsection{Comparison of Metaheuristics}
 
-To test how each metaheuristic impacts the value and time of finding approximate solutions, the metaheuristic algorithm was first run using only large neighbourhood search (LNS) where only improving candidate solutions are accepted (also known as hill climbing). Using this is a baseline, other metaheuristic strategies were cumulatively added in the following order: random restarts (restarts), simulated annealing (SA), tabu search (TS). To compare the impact of adding each metaheuristic, \Cref{fig:value_gap_perc_vs_heuristic} and \cref{fig:time_gap_perc_vs_heuristic} show the value gap and time gap (respectively) when adding each metaheuristic. It is important to note that these results are aggregated at a high level across problem instances of very different sizes and difficulties and these results are shown only to illustrate the general trend - a more detailed analysis of the results is given in \cref{subsec:result_distributions}. The results shows that even the basic hill climbing can get within 1.65\% (average) / 0.95\% (median) of the optimal value but the standard deviation is relatively high, suggesting that it gives inconsistent results. Adding random restarts closes the value gap to 1.34\% (average) / 0.71\% (median) and takes approximately the same amount of time. This is expected because hill climbing and random restarts were given the same number of iterations, but the latter was allowed to restart up to 10 times within that number of iterations if the search stagnated. Adding simulated annealing slightly improved the value gap but the time gap noticeably worsened. However, the median time gap shows that it still performed 9\% faster than the complete algorithm. Adding tabu search slightly increased the value gap and dramatically increased the time gap.
+To test how each metaheuristic impacts the value and time of finding approximate solutions, the metaheuristic algorithm was first run using only large neighbourhood search (LNS) where only improving candidate solutions are accepted (also known as hill climbing). Using this is a baseline, other metaheuristic strategies were cumulatively added in the following order: random restarts (restarts), simulated annealing (SA), tabu search (TS). To compare the impact of adding each metaheuristic, \cref{heuristic_gaps} shows the value and time gaps when adding each metaheuristic. It is important to note that these results are aggregated at a high level across problem instances of very different sizes and difficulties and these results are shown only to illustrate the general trend - a more detailed analysis of the results is given in \cref{subsec:result_distributions}. The results shows that even the basic hill climbing can get within 1.65\% (average) / 0.95\% (median) of the optimal value but the standard deviation is relatively high, suggesting that it gives inconsistent results. Adding random restarts closes the value gap to 1.34\% (average) / 0.71\% (median) and takes approximately the same amount of time. This is expected because hill climbing and random restarts were given the same number of iterations, but the latter was allowed to restart up to 10 times within that number of iterations if the search stagnated. Adding simulated annealing slightly improved the value gap but the time gap noticeably worsened. However, the median time gap shows that it still performed 9\% faster than the complete algorithm. Adding tabu search slightly increased the value gap and dramatically increased the time gap.
 
 The small increase in the value gap when using tabu search could be because the search is getting stalled when the tabu list forbids accepting certain moves. Possible reasons for this could be the definition of the move or the length of the tabu tenure. On reflection, a better definition of a move could have been to have the concept of a departure sprint and a destination sprint. The tabu list would then prevent moving a story from its destination sprint back to its departure sprint whereas the definition used in this thesis was only to prevent a story being moved back to its departure sprint (i.e. it could not be moved from \emph{any} sprint back to its departure sprint while it was tabu). It could also be due to the fact that neighbours are generated stochastically and there may be cases where several successive neighbours are generated but all contain the same banned moves. As long as there is the chance that a move that was already recently found to be tabu can appear in successive neighbours (effectively a 'random choice with replacement' approach), the search may stall. On one hand, this is precisely the job of the tabu list so that the search is encouraged to explore new areas, but ultimately, preventing the search from accepting neighbours costs iterations that may have led to higher-value solutions. The worse time gap could simply be due to the additional overhead of creating moves during destruction, checking moves, and generally managing the tabu list. This overheard is low in small problems but since both the size of the tabu list and the tabu tenure are functions of the size of the problem, this overhead grows as the size of the problem grows (although it does only grow linearly). Additionally, \cref{subsec:result_distributions} will show that most 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\begin{figure}[h!]
-    \centering
-    \includegraphics[width=\textwidth]{Figures/Metaheuristics/value_gap_perc_vs_heuristic.png}
-    \caption{Heuristics vs Value Gap \%}
-    \label{fig:value_gap_perc_vs_heuristic}
-\end{figure}
+\begin{table}[h!]
+\centering
 
-\begin{figure}[h!]
-    \centering
-    \includegraphics[width=\textwidth]{Figures/Metaheuristics/time_gap_perc_vs_heuristic.png}
-    \caption{Heuristics vs Time Gap \% (positive gap means the metaheuristic method was faster)}
-    \label{fig:time_gap_perc_vs_heuristic}
-\end{figure}
-
+\begin{tabular}{|l|c|c|c|c|c|c|c|c|}
+\hline
+ & \multicolumn{4}{c|}{\textbf{Value Gap \%}} & \multicolumn{4}{c|}{\textbf{Time Gap \%}} \\ \hline
+\textbf{Heuristics} & \textbf{Min} & \textbf{Avg} & \textbf{Median} & \textbf{Max} & \textbf{Min} & \textbf{Avg} & \textbf{Median} & \textbf{Max} \\ \hline
+LNS & 0 & 1.65 & 0.95 & 14.72 & -162.33 & 36.96 & 53.7 & 99.69 \\ \hline
+LNS + Restarts & 0 & 1.34 & 0.71 & 9.82 & -161.96 & 37.66 & 53.98 & 99.69 \\ \hline
+LNS + Restarts + SA & 0 & 1.34 & 0.69 & 10.88 & -367.49 & -26.04 & 8.51 & 99.43 \\ \hline
+LNS + Restarts + SA + TS & 0 & 1.36 & 0.7 & 9.53 & -505.45 & -60.47 & -16.37 & 99.32 \\ \hline
+\end{tabular}
+\caption{Value and time gaps (positive time gap means the metaheuristic method was faster than the complete method)}
+\label{heuristic_gaps}
+\end{table}
 
 \subsection{Result Distributions}
 \label{subsec:result_distributions}
